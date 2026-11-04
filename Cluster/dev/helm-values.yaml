@@ -1,0 +1,23 @@
+controller:
+  defaultTLS:
+    secret: proxy/wildcard-frontend-tls
+  nodeSelector:
+    role: proxy
+  kind: deployment
+  replicaCount: 2 
+  enableCustomResources: true
+  ingressClass:
+    name: nginx
+  service:
+    type: NodePort
+    externalTrafficPolicy: Local
+    httpPort:  { enable: true, nodePort: 30080 }
+    httpsPort: { enable: true, nodePort: 30443 }
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: nginx-ingress
+          app.kubernetes.io/instance: nginx-ingress   # = helm release name

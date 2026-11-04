@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: proxy
+---
+# 1) Bootstrap issuer: only used once, to sign the CA certificate below
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-bootstrap
+  namespace: proxy
+spec:
+  selfSigned: {}
+---
+# 2) The internal CA certificate (stored in secret internal-ca-secret)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-ca
+  namespace: proxy
+spec:
+  isCA: true
+  commonName: internal-ca
+  secretName: internal-ca-secret
+  duration: 87600h        # 10 years
+  renewBefore: 8760h      # renew 1 year before expiry
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: Issuer
+---
+# 3) Issuer backed by the CA: everything below (and the script) signs through this
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: internal-ca-issuer
+  namespace: proxy
+spec:
+  ca:
+    secretName: internal-ca-secret
+---
+# 4) Wildcard certificate for the frontend (EDIT dnsNames to your domain)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-frontend-crt
+  namespace: proxy
+spec:
+  secretName: wildcard-frontend-tls
+  commonName: "*.example.net"
+  dnsNames:
+    - "*.example.net"
+    - "example.net"
+  duration: 2160h         # 90 days
+  renewBefore: 360h       # renew 15 days before expiry
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+  issuerRef:
+    name: internal-ca-issuer
+    kind: Issuer
+---
+# 5) Client certificate presented by the proxy to the backends (mTLS)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: proxy-client-crt
+  namespace: proxy
+spec:
+  secretName: proxy-client-tls
+  commonName: proxy-client
+  duration: 8760h         # 1 year
+  renewBefore: 720h       # renew 30 days before expiry
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+  issuerRef:
+    name: internal-ca-issuer
+    kind: Issuer

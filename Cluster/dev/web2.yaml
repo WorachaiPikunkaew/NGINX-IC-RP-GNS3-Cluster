@@ -1,0 +1,67 @@
+# ---- web2.example.net -> 10.0.24.24:443 ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: web2-service
+  namespace: proxy
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: web2-backend-address
+  namespace: proxy
+  labels:
+    kubernetes.io/service-name: web2-service
+addressType: IPv4
+ports:
+  - name: https
+    protocol: TCP
+    port: 443
+endpoints:
+  - addresses: ["192.168.42.32"]
+    conditions: { ready: true }
+---
+apiVersion: k8s.nginx.org/v1
+kind: Policy
+metadata:
+  name: web2-egress-policy
+  namespace: proxy
+spec:
+  egressMTLS:
+    tlsSecret: proxy-client-tls   # client cert we present
+    trustedCertSecret: internal-ca-secret       # CA we trust for the backend
+    verifyServer: true
+    verifyDepth: 1
+    serverName: true                     # send SNI
+    sslName: web2.example.net            # name checked against backend cert SAN
+    protocols: "TLSv1.2 TLSv1.3"
+---
+apiVersion: k8s.nginx.org/v1
+kind: VirtualServer
+metadata:
+  name: web2
+  namespace: proxy
+spec:
+  ingressClassName: nginx
+  host: web2.example.net
+  tls:
+    secret: wildcard-frontend-tls
+    redirect:
+      enable: true
+  policies:
+    - name: web2-egress-policy
+  upstreams:
+    - name: web2
+      service: web2-service
+      port: 443
+      tls:
+        enable: true                     # required for mTLS to actually happen
+  routes:
+    - path: /
+      action:
+        pass: web2

@@ -1,0 +1,24 @@
+vrrp_script chk_haproxy {
+    script "/bin/pidof haproxy"
+    interval 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass changeme1
+    }
+    virtual_ipaddress {
+        192.168.42.10/24
+    }
+    track_script {
+        chk_haproxy
+    }
+}
